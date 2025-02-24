@@ -1,60 +1,55 @@
-const express = require('express');
-const User = require('../Models/User'); // Ensure correct path to User model
-const bcrypt = require('bcrypt');
-
+const express = require("express");
+const User = require("../Models/User");
 const router = express.Router();
 
-router.get("/signin", (req, res) => {
-    return res.render("SignIn");
-});
+router.get("/signin", (req, res) => res.render("SignIn"));
+router.get("/signup", (req, res) => res.render("SignUp"));
 
-router.get("/signup", (req, res) => {
-    return res.render("SignUp");
-});
-
-// Register User Route
-router.post('/signup', async (req, res) => {
+// User Sign-In Route
+router.post("/signin", async (req, res) => {
     try {
-        const { firstName, lastName, email, password, role } = req.body;
-
-        // Check if email already exists
-        const existingUser  = await User.findOne({ email });
-        if (existingUser ) {
-            return res.status(400).json({ message: "Email already exists!" });
-        }
-
-        // Password validation
-        const passwordRegex =
-            /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-        
-        if (!passwordRegex.test(password)) {
-            return res.status(400).json({
-                message: "Password must have at least 8 characters, one uppercase letter, one lowercase letter, one number, and one special character."
-            });
-        }
-
-        // Hash password
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(password, salt);
-
-        // Create user
-        const newUser  = new User({
-            firstName,
-            lastName,
-            email,
-            password: hashedPassword,
-            role: role || "USER" // Default role
-        });
-
-        await newUser .save();
-
-        // Redirect or send JSON response (choose one)
-        return res.redirect("/signin"); // Redirect to SignIn page after signup
-    } 
-    catch (error) {
-        console.error("Signup Error:", error);
-        return res.status(500).json({ message: "Server Error", error: error.message });
+      const { email, password } = req.body;
+      console.log("Incoming Sign-In Request:", req.body);
+  
+      if (!email || !password) {
+        return res.status(400).json({ message: "Email and password are required!" });
+      }
+  
+      // This method already verifies the password
+      const token = await User.matchPasswordandGenerateToken(email, password);
+  
+      console.log("User Signed In Successfully:", email);
+      
+      // Set token in cookies (optional)
+      res.cookie("authToken", token, { httpOnly: true });
+  
+      return res.cookie('token',token).redirect("/");
+    } catch (error) {
+      return res.status(500).render("SignIn",{error:"Incorrect Email or Password"});
     }
+  });
+  
+
+// User Registration Route
+router.post("/signup", async (req, res) => {
+  try {
+    console.log("Incoming Request Body:", req.body);
+
+    let { firstName, lastName, email, password, role } = req.body;
+    if (!email) return res.status(400).json({ message: "Email is required!" });
+
+    email = email.trim().toLowerCase();
+    if (await User.findOne({ email })) return res.status(400).json({ message: "Email already in use!" });
+
+    const newUser = new User({ firstName, lastName, email, password, role: role || "USER" });
+    await newUser.save();
+
+    console.log("✅ User Created Successfully:", newUser);
+    return res.redirect("/user/signin");
+  } catch (error) {
+    console.error("❌ Signup Error:", error);
+    return res.status(500).json({ message: "Server Error", error: error.message });
+  }
 });
 
 module.exports = router;
